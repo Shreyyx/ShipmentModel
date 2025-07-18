@@ -1,0 +1,69 @@
+Function updateShipment(shipmentId, updates):
+    shipment = find Shipment by shipmentId
+    If shipment.shipment_id not found:
+        Return "Shipment not found"
+
+    currentStatus = shipment.statusId
+
+    -- CANCELLATION FLOW --
+    If updates.status == "SHIPMENT_CANCELLED":
+        If currentStatus in ["SHIPMENT_SHIPPED" or "SHIPMENT_DELIVERED"]:
+            Return "Cannot cancel an already shipped shipment"
+        Else:
+            Update Shipment:
+                statusId = "SHIPMENT_CANCELLED"
+            Return "Shipment cancelled"
+
+    -- SHIPMENT / DELIVERY FLOW --
+    If updates.status in ["SHIPMENT_SHIPPED"]:
+    	fulfilled_quantity +=1
+      
+        For each item in updates.items:
+            inventoryItem = get available InventoryItem where:
+                productId = item.productId AND
+                facilityId = item.facilityId AND
+                quantityOnHandTotal >= item.fulfilledQuantity
+
+            If inventoryItem == null:
+                Continue  
+
+            -- Create ItemIssuance
+            Create new ItemIssuance:
+                itemIssuanceId = generated_sequenced_id
+                shipmentId = shipmentId
+                shipmentItemSeqId = item.shipmentItemSeqId
+                orderId = updates.orderId
+                orderItemSeqId = item.orderItemSeqId
+                inventoryItemId = inventoryItem.inventoryItemId
+                productId = item.productId
+                quantity = item.fulfilledQuantity
+                facilityId = item.facilityId
+                issuedDate = now()
+
+            -- Create InventoryItemDetail (adjustment)
+            Create new InventoryItemDetail:
+                inventoryItemDetailSeqId = sequenced
+                inventoryItemId = inventoryItem.inventoryItemId
+                shipmentId = shipmentId
+                shipmentItemSeqId = item.shipmentItemSeqId
+                orderId = updates.orderId
+                orderItemSeqId = item.orderItemSeqId
+                shipGroupSeqId = updates.shipGroupSeqId
+                quantityOnHandDiff = -item.fulfilledQuantity
+                availableToPromiseDiff = -item.fulfilledQuantity
+
+            -- Adjust InventoryItem counts
+            inventoryItem.quantityOnHandTotal -= item.fulfilledQuantity
+            inventoryItem.availableToPromiseTotal -= item.fulfilledQuantity
+            Update inventoryItem
+
+        -- Update Shipment status and dates
+        Update Shipment:
+            statusId = shipmentStatus
+            If shipmentStatus == "SHIPMENT_SHIPPED":
+                actualShipDate = now()
+            If shipmentStatus == "SHIPMENT_DELIVERED":
+                actualDeliveryDate = now()
+
+        Return "Shipment updated successfully with inventory adjustments"
+

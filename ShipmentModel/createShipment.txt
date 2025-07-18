@@ -1,0 +1,40 @@
+Function createShipment(input):
+
+    // Step 1: Generate a new shipment ID
+    shipment_id = generateUniqueId("SHIPMENT")
+
+    // Step 2: Insert main Shipment record
+    Insert into Shipment table with:
+        shipment_id = shipment_id
+        primary_order_id = input.order_id
+        primary_ship_group_seq_id = input.ship_group_seq_id
+        status_id = "SHIPMENT_CREATED"
+        shipment_type_id = input.shipment_type_id
+        tracking_number = input.tracking_number
+        carrier_party_id = input.carrier_party_id
+        shipment_method_type_id = input.method
+        origin_contact_mech_id = input.origin_contact
+        estimated_ship_date = input.estimated_ship_date
+        estimated_delivery_date = input.estimated_delivery_date
+
+    // Step 3: Insert each item into ShipmentItem
+    For each item in input.items:
+        shipment_item_seq_id = generateSequenceId("SHIPMENT_ITEM")
+
+        Insert into ShipmentItem table with:
+            shipment_id = shipment_id
+            shipment_item_seq_id = shipment_item_seq_id
+            product_id = item.product_id
+            quantity = item.quantity
+
+    // Step 4 validate the entries
+    If any insertion fails:
+        Return "Failed to create shipment"
+
+    // Step 5: Return shipment ID as confirmation
+    Return {
+        status: "success",
+        shipment_id: shipment_id,
+        message: "Shipment created successfully"
+    }
+

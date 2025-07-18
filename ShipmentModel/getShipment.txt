@@ -1,0 +1,36 @@
+Function getShipmentById(shipment_id):
+
+    // Step 1: First, check if the shipment exists
+    shipment = fetch from Shipment table where shipment_id = shipment_id
+
+    If shipment is not found:
+        Return "Shipment not found."
+
+    // Step 2: Now get the items inside the shipment
+    shipmentItems = fetch from ShipmentItem table where shipment_id = shipment_id
+
+    If no shipmentItems found:
+        Return "No items found for this shipment."
+        shipmentItems = []
+
+    // Step 3: Get what was actually issued from inventory
+    itemIssuances = fetch from ItemIssuance table where shipment_id = shipment_id
+
+    If no itemIssuance records:
+        Return "No such item records found in itemIssuance"
+        itemIssuances = []
+
+    // Step 4: Get inventory item detail
+    inventoryItemDetail = fetch from InventoryItemDetail table where shipment_id = shipment_id
+
+    If no adjustments found:
+        Return "No inventory changes recorded for this shipment."
+        inventoryItemDetail = []
+
+    Return {
+        shipment: shipment,
+        items: shipmentItems,
+        issuedItems: itemIssuances,
+        inventoryChanges: inventoryItemDetail
+    }
+
