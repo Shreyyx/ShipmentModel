@@ -1,10 +1,10 @@
 Function createShipment(input):
 
-    // Step 1: Generate a new shipment ID
+    // Step 1: Generate a new Shipment ID
     shipment_id = generateUniqueId("SHIPMENT")
 
     // Step 2: Insert main Shipment record
-    Insert into Shipment table with:
+    Insert into Shipment table:
         shipment_id = shipment_id
         primary_order_id = input.order_id
         primary_ship_group_seq_id = input.ship_group_seq_id
@@ -12,7 +12,7 @@ Function createShipment(input):
         shipment_type_id = input.shipment_type_id
         tracking_number = input.tracking_number
         carrier_party_id = input.carrier_party_id
-        shipment_method_type_id = input.method
+        shipment_method_type_id = input.shipment_method
         origin_contact_mech_id = input.origin_contact
         estimated_ship_date = input.estimated_ship_date
         estimated_delivery_date = input.estimated_delivery_date
@@ -20,21 +20,94 @@ Function createShipment(input):
     // Step 3: Insert each item into ShipmentItem
     For each item in input.items:
         shipment_item_seq_id = generateSequenceId("SHIPMENT_ITEM")
-
-        Insert into ShipmentItem table with:
+        
+        Insert into ShipmentItem:
             shipment_id = shipment_id
             shipment_item_seq_id = shipment_item_seq_id
             product_id = item.product_id
             quantity = item.quantity
 
-    // Step 4 validate the entries
-    If any insertion fails:
-        Return "Failed to create shipment"
+    // Step 4: Create a shipment package
+    shipment_package_seq_id = generateSequenceId("PACKAGE")
+    
+    Insert into ShipmentPackage:
+        shipmentId = shipment_id
+        shipmentPackageSeqId = shipment_package_seq_id
+        boxTypeId = input.package.box_type
+        weight = input.package.weight
+        weightUomId = input.package.weight_unit
+        dimensionUomId = input.package.dimension_unit
+        height = input.package.height
+        width = input.package.width
+        depth = input.package.depth
+        trackingCode = input.package.tracking_code
+        packageName = input.package.package_name
 
-    // Step 5: Return shipment ID as confirmation
+    // Step 5: Add route segment for the shipment
+    shipment_route_segment_id = generateSequenceId("ROUTE_SEGMENT")
+
+    Insert into ShipmentRouteSegment:
+        shipmentId = shipment_id
+        shipmentRouteSegmentId = shipment_route_segment_id
+        carrierPartyId = input.carrier_party_id
+        originFacilityId = input.route.origin_facility
+        destFacilityId = input.route.destination_facility
+        originContactMechId = input.route.origin_contact
+        destContactMechId = input.route.destination_contact
+        shipmentMethodTypeId = input.shipment_method
+        carrierServiceStatusId = "IN_TRANSIT"
+        statusId = "CREATED"
+        estimatedStartDate = input.route.start_date
+        estimatedArrivalDate = input.route.arrival_date
+
+    // Step 6: Map the package to the route segment
+    Insert into ShipmentPackageRouteSegment:
+        shipmentId = shipment_id
+        shipmentPackageSeqId = shipment_package_seq_id
+        shipmentRouteSegmentId = shipment_route_segment_id
+        boxNumber = input.package.box_number
+        trackingCode = input.package.tracking_code
+
+        item_issuance_id = generateSequenceId("ITEM_ISSUANCE")
+
+        Insert into ItemIssuance:
+            item_issuance_id = item_issuance_id
+            shipment_id = shipment_id
+            shipment_item_seq_id = shipment_item_seq_id
+            order_id = input.order_id
+            order_item_seq_id = item.order_item_seq_id
+            inventory_item_id = inventory_item_id
+            product_id = item.product_id
+            quantity = item.quantity
+            facility_id = input.facility_id
+
+        // Update inventory tracking
+        Insert into InventoryItemDetail:
+            inventory_item_detail_id = generateSequenceId("INVENTORY_DETAIL")
+            inventory_item_id = inventory_item_id
+            shipment_id = shipment_id
+            order_id = input.order_id
+            quantity_on_hand_diff = -item.quantity
+            available_to_promise_diff = -item.quantity
+            reason = "SHIPMENT"
+
+    // Step 8: Map shipment with order
+    For each item in input.items:
+        Insert into OrderShipment:
+            orderId = input.order_id
+            orderItemSeqId = item.order_item_seq_id
+            shipmentId = shipment_id
+            shipmentItemSeqId = shipment_item_seq_id
+            quantity = item.quantity
+
+    // Step 9: Final Validation
+    If any insert fails:
+        Rollback all transactions
+        Return { status: "failed", message: "Shipment creation failed due to error" }
+
+    // Step 10: Success
     Return {
         status: "success",
         shipment_id: shipment_id,
         message: "Shipment created successfully"
     }
-
