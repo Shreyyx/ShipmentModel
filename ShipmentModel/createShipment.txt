@@ -1,6 +1,6 @@
 Function createShipment(input):
 
-    // Step 1: Generate a new Shipment ID
+    -- Step 1: Generate a new Shipment ID --
     shipment_id = generateUniqueId("SHIPMENT")
 
     // Step 2: Insert main Shipment record
