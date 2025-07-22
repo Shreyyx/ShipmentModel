@@ -1,69 +1,79 @@
 Function updateShipment(shipmentId, updates):
-    shipment = find Shipment by shipmentId
-    If shipment.shipment_id not found:
-        Return "Shipment not found"
 
-    currentStatus = shipment.statusId
+    // Step 1: Retrieve the shipment record
+    shipment = SELECT * FROM Shipment WHERE shipment_id = shipmentId
+    If shipment is NULL:
+        Return { status: "error", message: "Shipment not found" }
 
-    -- CANCELLATION FLOW --
+    currentStatus = shipment.status_id
+
+    // Step 2: Handle CANCELLATION
     If updates.status == "SHIPMENT_CANCELLED":
-        If currentStatus in ["SHIPMENT_SHIPPED" or "SHIPMENT_DELIVERED"]:
-            Return "Cannot cancel an already shipped shipment"
+        If currentStatus IN ["SHIPMENT_SHIPPED", "SHIPMENT_DELIVERED"]:
+            Return { status: "error", message: "Cannot cancel a shipment that is already shipped or delivered" }
         Else:
-            Update Shipment:
-                statusId = "SHIPMENT_CANCELLED"
-            Return "Shipment cancelled"
+            UPDATE Shipment SET status_id = "SHIPMENT_CANCELLED", updated_date = now()
+            Return { status: "success", message: "Shipment cancelled successfully" }
 
-    -- SHIPMENT / DELIVERY FLOW --
-    If updates.status in ["SHIPMENT_SHIPPED"]:
-    	fulfilled_quantity +=1
-      
+    // Step 3: Handle SHIPPING and DELIVERY
+    If updates.status IN ["SHIPMENT_SHIPPED", "SHIPMENT_DELIVERED"]:
+
         For each item in updates.items:
-            inventoryItem = get available InventoryItem where:
-                productId = item.productId AND
-                facilityId = item.facilityId AND
-                quantityOnHandTotal >= item.fulfilledQuantity
+            productId = item.product_id
+            quantityNeeded = item.fulfilled_quantity
+            facilityId = item.facility_id
 
-            If inventoryItem == null:
-                Continue  
+            //Fetch inventory item
+            inventoryItem = SELECT * FROM InventoryItem
+                            WHERE product_id = productId
+                              AND facility_id = facilityId
+                              AND quantity_on_hand_total >= quantityNeeded
 
-            -- Create ItemIssuance
-            Create new ItemIssuance:
-                itemIssuanceId = generated_sequenced_id
-                shipmentId = shipmentId
-                shipmentItemSeqId = item.shipmentItemSeqId
-                orderId = updates.orderId
-                orderItemSeqId = item.orderItemSeqId
-                inventoryItemId = inventoryItem.inventoryItemId
-                productId = item.productId
-                quantity = item.fulfilledQuantity
-                facilityId = item.facilityId
-                issuedDate = now()
+            If inventoryItem is NULL:
+                Log "Inventory not found or insufficient for productId: " + productId
+                Continue // Skip to next item
 
-            -- Create InventoryItemDetail (adjustment)
-            Create new InventoryItemDetail:
-                inventoryItemDetailSeqId = sequenced
-                inventoryItemId = inventoryItem.inventoryItemId
-                shipmentId = shipmentId
-                shipmentItemSeqId = item.shipmentItemSeqId
-                orderId = updates.orderId
-                orderItemSeqId = item.orderItemSeqId
-                shipGroupSeqId = updates.shipGroupSeqId
-                quantityOnHandDiff = -item.fulfilledQuantity
-                availableToPromiseDiff = -item.fulfilledQuantity
+            // Create ItemIssuance
+            itemIssuanceId = generateSequence("ITEM_ISSUANCE")
+            INSERT INTO ItemIssuance (
+                item_issuance_id, shipment_id, shipment_item_seq_id,
+                order_id, order_item_seq_id, inventory_item_id,
+                product_id, quantity, facility_id, issued_date
+            ) VALUES (
+                itemIssuanceId, shipmentId, item.shipment_item_seq_id,
+                updates.order_id, item.order_item_seq_id, inventoryItem.inventory_item_id,
+                productId, quantityNeeded, facilityId, now()
+            )
 
-            -- Adjust InventoryItem counts
-            inventoryItem.quantityOnHandTotal -= item.fulfilledQuantity
-            inventoryItem.availableToPromiseTotal -= item.fulfilledQuantity
-            Update inventoryItem
+            // Create InventoryItemDetail (adjustment)
+            inventoryDetailId = generateSequence
+            INSERT INTO InventoryItemDetail (
+                inventory_item_detail_id, inventory_item_id,
+                shipment_id, order_id,
+                quantity_on_hand_diff, available_to_promise_diff,
+                reason, created_date
+            ) VALUES (
+                inventoryDetailId, inventoryItem.inventory_item_id,
+                shipmentId, updates.order_id,
+                -quantityNeeded, -quantityNeeded,
+                'SHIPMENT', now()
+            )
 
-        -- Update Shipment status and dates
-        Update Shipment:
-            statusId = shipmentStatus
-            If shipmentStatus == "SHIPMENT_SHIPPED":
-                actualShipDate = now()
-            If shipmentStatus == "SHIPMENT_DELIVERED":
-                actualDeliveryDate = now()
+            // Step 3d: Update InventoryItem quantities
+            inventoryItem.quantity_on_hand_total -= quantityNeeded
+            inventoryItem.available_to_promise_total -= quantityNeeded
+            UPDATE InventoryItem SET
+                quantity_on_hand_total = inventoryItem.quantity_on_hand_total,
+                available_to_promise_total = inventoryItem.available_to_promise_total
+            WHERE inventory_item_id = inventoryItem.inventory_item_id
 
-        Return "Shipment updated successfully with inventory adjustments"
+        // Step 4: Update Shipment status and relevant dates
+        If updates.status == "SHIPMENT_SHIPPED":
+            UPDATE Shipment SET status_id = "SHIPMENT_SHIPPED", actual_ship_date = now(), updated_date = now()
+        If updates.status == "SHIPMENT_DELIVERED":
+            UPDATE Shipment SET status_id = "SHIPMENT_DELIVERED", actual_delivery_date = now(), updated_date = now()
 
+        Return { status: "success", message: "Shipment updated with inventory adjustments" }
+
+    // Step 5: If none of the above matched
+    Return { status: "error", message: "no action performed" }
