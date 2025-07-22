@@ -1,36 +1,49 @@
 Function getShipmentById(shipment_id):
 
-    // Step 1: First, check if the shipment exists
-    shipment = fetch from Shipment table where shipment_id = shipment_id
+    // Step 1: Fetch the Shipment record
+    shipment = SELECT * FROM Shipment WHERE shipment_id = shipment_id
 
-    If shipment is not found:
-        Return "Shipment not found."
+    If shipment is NULL:
+        Return { status: "error", message: "Shipment not found." }
 
-    // Step 2: Now get the items inside the shipment
-    shipmentItems = fetch from ShipmentItem table where shipment_id = shipment_id
-
-    If no shipmentItems found:
-        Return "No items found for this shipment."
+    // Step 2: Fetch items in the shipment
+    shipmentItems = SELECT * FROM ShipmentItem WHERE shipment_id = shipment_id
+    If shipmentItems is empty:
         shipmentItems = []
 
-    // Step 3: Get what was actually issued from inventory
-    itemIssuances = fetch from ItemIssuance table where shipment_id = shipment_id
+    // Step 3: Fetch package info
+    packages = SELECT * FROM ShipmentPackage WHERE shipmentId = shipment_id
+    If packages is empty:
+        packages = []
 
-    If no itemIssuance records:
-        Return "No such item records found in itemIssuance"
+    // Step 4: Fetch route segments
+    routeSegments = SELECT * FROM ShipmentRouteSegment WHERE shipmentId = shipment_id
+    If routeSegments is empty:
+        routeSegments = []
+
+    // Step 5: Fetch package-to-route mapping
+    packageRouteSegments = SELECT * FROM ShipmentPackageRouteSegment WHERE shipmentId = shipment_id
+    If packageRouteSegments is empty:
+        packageRouteSegments = []
+
+    // Step 6: Fetch item issuance details
+    itemIssuances = SELECT * FROM ItemIssuance WHERE shipment_id = shipment_id
+    If itemIssuances is empty:
         itemIssuances = []
 
-    // Step 4: Get inventory item detail
-    inventoryItemDetail = fetch from InventoryItemDetail table where shipment_id = shipment_id
+    // Step 7: Fetch inventory item adjustments
+    inventoryAdjustments = SELECT * FROM InventoryItemDetail WHERE shipment_id = shipment_id
+    If inventoryAdjustments is empty:
+        inventoryAdjustments = []
 
-    If no adjustments found:
-        Return "No inventory changes recorded for this shipment."
-        inventoryItemDetail = []
-
+    // Step 8: Build and return final response
     Return {
+        status: "success",
         shipment: shipment,
-        items: shipmentItems,
+        shipmentItems: shipmentItems,
+        shipmentPackages: packages,
+        routeSegments: routeSegments,
+        packageRouteSegments: packageRouteSegments,
         issuedItems: itemIssuances,
-        inventoryChanges: inventoryItemDetail
+        inventoryAdjustments: inventoryAdjustments
     }
-
